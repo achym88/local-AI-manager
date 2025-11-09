@@ -106,18 +106,35 @@ export const useTerminal = () => {
     socket.on('terminal-output', (data: string) => {
       term.write(data);
 
-      // Monitor output for Claude interaction
-      if (isClaudeRunning || claudeStartedRef.current) {
+      // Monitor output for Claude interaction (check the ref, not state)
+      if (claudeStartedRef.current) {
         outputBufferRef.current += data;
+
+        console.log('[Claude Monitor] Buffer length:', outputBufferRef.current.length, 'Waiting for context:', isWaitingForContextRef.current);
 
         // Check if we're waiting for context output
         if (isWaitingForContextRef.current) {
-          // Look for context information in the output
-          const contextMatch = outputBufferRef.current.match(/Context:.*?(\d+).*?tokens?.*?(\d+).*?files?/is);
+          // Look for context information in the output - more flexible regex
+          const contextPatterns = [
+            /Context:\s*(\d+)\s*tokens?\s*.*?(\d+)\s*files?/is,
+            /(\d+)\s*tokens?.*?Context.*?(\d+)\s*files?/is,
+            /(\d+)\s*total tokens.*?(\d+)\s*files?/is,
+          ];
+
+          let contextMatch = null;
+          for (const pattern of contextPatterns) {
+            const match = outputBufferRef.current.match(pattern);
+            if (match) {
+              contextMatch = match;
+              break;
+            }
+          }
+
           if (contextMatch) {
+            console.log('[Claude Monitor] Found context:', contextMatch);
             setClaudeContext({
-              totalTokens: parseInt(contextMatch[1]),
-              filesCount: parseInt(contextMatch[2]),
+              totalTokens: parseInt(contextMatch[1]) || 0,
+              filesCount: parseInt(contextMatch[2]) || 0,
               lastUpdated: new Date(),
               rawOutput: outputBufferRef.current,
             });
@@ -125,17 +142,13 @@ export const useTerminal = () => {
             outputBufferRef.current = '';
           }
         } else {
-          // Detect when Claude finishes responding (look for the prompt coming back)
-          // Claude typically shows a prompt after finishing
-          const promptPatterns = [
-            /\n.*?>\s*$/,  // Generic prompt ending
-            /\n.*?❯\s*$/,  // Modern prompt
-            /\n.*?\$\s*$/,  // Shell prompt
-          ];
+          // Detect when Claude finishes responding
+          // Look for Claude's prompt patterns more robustly
+          const hasClaudePrompt = /Claude ❯|Claude >|\n❯|\n>/.test(outputBufferRef.current);
+          const hasRegularPrompt = /\$\s*$|\n>\s*$/.test(outputBufferRef.current);
 
-          const hasPrompt = promptPatterns.some(pattern => pattern.test(outputBufferRef.current));
-
-          if (hasPrompt && outputBufferRef.current.length > 100) {
+          if ((hasClaudePrompt || hasRegularPrompt) && outputBufferRef.current.length > 50) {
+            console.log('[Claude Monitor] Claude response detected, requesting context');
             // Claude finished responding, trigger /context update
             setTimeout(() => {
               socket.emit('terminal-input', '/context\r');
