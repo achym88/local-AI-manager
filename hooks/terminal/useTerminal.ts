@@ -99,6 +99,13 @@ export const useTerminal = () => {
           socket.emit('terminal-input', 'claude\r');
           claudeStartedRef.current = true;
           setIsClaudeRunning(true);
+
+          // Request initial context after Claude starts
+          setTimeout(() => {
+            console.log('[Claude Monitor] Requesting initial context');
+            socket.emit('terminal-input', '/context\r');
+            isWaitingForContextRef.current = true;
+          }, 2000);
         }
       }, 500);
     });
@@ -114,29 +121,68 @@ export const useTerminal = () => {
 
         // Check if we're waiting for context output
         if (isWaitingForContextRef.current) {
-          // Look for context information in the output - more flexible regex
+          // Strip ANSI escape codes for easier parsing
+          const stripAnsi = (str: string) => str.replace(/\x1b\[[0-9;]*m/g, '').replace(/\x1b\[.*?[@-~]/g, '');
+          const cleanOutput = stripAnsi(outputBufferRef.current);
+
+          console.log('[Claude Monitor] Clean output:', cleanOutput.slice(-500));
+
+          // Look for context information in the output - comprehensive patterns
           const contextPatterns = [
-            /Context:\s*(\d+)\s*tokens?\s*.*?(\d+)\s*files?/is,
+            // Pattern for "token_budget>200000</budget" format
+            /token_budget>(\d+)<\/budget/i,
+            // Pattern for "Context: X tokens" or "X tokens" with "Y files"
+            /Context[:\s]+(\d+)\s*tokens?.*?(\d+)\s*files?/is,
             /(\d+)\s*tokens?.*?Context.*?(\d+)\s*files?/is,
             /(\d+)\s*total tokens.*?(\d+)\s*files?/is,
+            // Pattern for "Context window usage: X/Y tokens"
+            /Context window.*?(\d+)[\/\s]+\d+\s*tokens?.*?(\d+)\s*files?/is,
+            // Pattern for standalone numbers with tokens/files
+            /(\d{3,})\s*tokens.*?(\d+)\s*files/is,
+            // Pattern for budget info
+            /<budget.*?(\d+).*?budget>.*?(\d+)\s*files/is,
           ];
 
-          let contextMatch = null;
+          let tokensMatch = null;
+          let filesMatch = null;
+
+          // Try each pattern
           for (const pattern of contextPatterns) {
-            const match = outputBufferRef.current.match(pattern);
+            const match = cleanOutput.match(pattern);
             if (match) {
-              contextMatch = match;
-              break;
+              console.log('[Claude Monitor] Pattern matched:', pattern, 'Result:', match);
+              if (match[1]) tokensMatch = match[1];
+              if (match[2]) filesMatch = match[2];
+              if (tokensMatch && filesMatch) break;
             }
           }
 
-          if (contextMatch) {
-            console.log('[Claude Monitor] Found context:', contextMatch);
+          // Also try to find tokens and files separately
+          if (!tokensMatch) {
+            const tokenMatch = cleanOutput.match(/(\d{3,})\s*(?:total\s*)?tokens?/i);
+            if (tokenMatch) {
+              tokensMatch = tokenMatch[1];
+              console.log('[Claude Monitor] Found tokens separately:', tokensMatch);
+            }
+          }
+
+          if (!filesMatch) {
+            const fileMatch = cleanOutput.match(/(\d+)\s*files?(?:\s+in context)?/i);
+            if (fileMatch) {
+              filesMatch = fileMatch[1];
+              console.log('[Claude Monitor] Found files separately:', filesMatch);
+            }
+          }
+
+          // Update context if we found both values or if we have a timeout
+          const waitTime = Date.now() - (isWaitingForContextRef.current ? 0 : Date.now());
+          if ((tokensMatch && filesMatch) || cleanOutput.length > 2000) {
+            console.log('[Claude Monitor] Updating context with tokens:', tokensMatch, 'files:', filesMatch);
             setClaudeContext({
-              totalTokens: parseInt(contextMatch[1]) || 0,
-              filesCount: parseInt(contextMatch[2]) || 0,
+              totalTokens: parseInt(tokensMatch || '0') || 0,
+              filesCount: parseInt(filesMatch || '0') || 0,
               lastUpdated: new Date(),
-              rawOutput: outputBufferRef.current,
+              rawOutput: cleanOutput,
             });
             isWaitingForContextRef.current = false;
             outputBufferRef.current = '';
@@ -144,17 +190,22 @@ export const useTerminal = () => {
         } else {
           // Detect when Claude finishes responding
           // Look for Claude's prompt patterns more robustly
-          const hasClaudePrompt = /Claude ❯|Claude >|\n❯|\n>/.test(outputBufferRef.current);
-          const hasRegularPrompt = /\$\s*$|\n>\s*$/.test(outputBufferRef.current);
+          const stripAnsi = (str: string) => str.replace(/\x1b\[[0-9;]*m/g, '').replace(/\x1b\[.*?[@-~]/g, '');
+          const cleanBuffer = stripAnsi(outputBufferRef.current);
 
-          if ((hasClaudePrompt || hasRegularPrompt) && outputBufferRef.current.length > 50) {
+          // Check for various prompt indicators
+          const hasClaudePrompt = /Claude ❯|Claude >|Claude\s*[\>❯]/.test(cleanBuffer);
+          const hasPromptEnd = /[\>❯]\s*$/.test(cleanBuffer);
+          const hasNewPrompt = /\n.*?[\>❯]\s*$/.test(cleanBuffer);
+
+          if ((hasClaudePrompt || hasPromptEnd || hasNewPrompt) && cleanBuffer.length > 50) {
             console.log('[Claude Monitor] Claude response detected, requesting context');
             // Claude finished responding, trigger /context update
             setTimeout(() => {
               socket.emit('terminal-input', '/context\r');
               isWaitingForContextRef.current = true;
               outputBufferRef.current = '';
-            }, 300);
+            }, 500);
           }
         }
 
