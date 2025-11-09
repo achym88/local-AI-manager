@@ -1,36 +1,24 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getSocket } from '@/lib/terminal/socket';
 import type { TerminalInfo } from '@/lib/terminal/socket';
+import type { ClaudeContext } from '@/hooks/terminal/useTerminal';
+import ClaudeContextWidget from './ClaudeContextWidget';
 
-export default function ContextPanel() {
-  const [terminalInfo, setTerminalInfo] = useState<TerminalInfo | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
+interface ContextPanelProps {
+  terminalInfo: TerminalInfo | null;
+  isConnected: boolean;
+  claudeContext: ClaudeContext | null;
+  isClaudeRunning: boolean;
+}
+
+export default function ContextPanel({
+  terminalInfo,
+  isConnected,
+  claudeContext,
+  isClaudeRunning,
+}: ContextPanelProps) {
   const [sessionDuration, setSessionDuration] = useState(0);
-
-  useEffect(() => {
-    const socket = getSocket();
-
-    socket.on('connect', () => {
-      setIsConnected(true);
-    });
-
-    socket.on('disconnect', () => {
-      setIsConnected(false);
-      setTerminalInfo(null);
-    });
-
-    socket.on('terminal-created', (info: TerminalInfo) => {
-      setTerminalInfo(info);
-    });
-
-    return () => {
-      socket.off('connect');
-      socket.off('disconnect');
-      socket.off('terminal-created');
-    };
-  }, []);
 
   useEffect(() => {
     if (!isConnected) {
@@ -58,6 +46,12 @@ export default function ContextPanel() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        {/* Claude Context Widget - NEW! */}
+        <ClaudeContextWidget context={claudeContext} isClaudeRunning={isClaudeRunning} />
+
+        {/* Divider */}
+        <div className="border-t border-gray-700" />
+
         {/* Session Info */}
         <div>
           <h3 className="text-sm font-semibold text-gray-400 mb-3">Session Info</h3>

@@ -1,11 +1,14 @@
 'use client';
 
-import { useTerminal } from '@/hooks/terminal/useTerminal';
+import { RefObject } from 'react';
 import '@xterm/xterm/css/xterm.css';
 
-export default function Terminal() {
-  const { terminalRef, isConnected } = useTerminal();
+interface TerminalProps {
+  terminalRef: RefObject<HTMLDivElement | null>;
+  isConnected: boolean;
+}
 
+export default function Terminal({ terminalRef, isConnected }: TerminalProps) {
   return (
     <div className="h-full w-full flex flex-col bg-[#1e1e1e] rounded-lg overflow-hidden border border-gray-700">
       <div className="bg-gray-800 px-4 py-2 flex items-center justify-between border-b border-gray-700">

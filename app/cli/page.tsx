@@ -1,8 +1,13 @@
+'use client';
+
 import Terminal from '@/components/terminal/Terminal';
 import ContextPanel from '@/components/terminal/ContextPanel';
 import Link from 'next/link';
+import { useTerminal } from '@/hooks/terminal/useTerminal';
 
 export default function CLIPage() {
+  const { terminalRef, isConnected, terminalInfo, claudeContext, isClaudeRunning, fit } = useTerminal();
+
   return (
     <div className="h-screen flex flex-col bg-gray-950">
       {/* Header */}
@@ -30,12 +35,20 @@ export default function CLIPage() {
       <div className="flex-1 flex overflow-hidden">
         {/* Terminal - 70% */}
         <div className="w-[70%] p-4">
-          <Terminal />
+          <Terminal
+            terminalRef={terminalRef}
+            isConnected={isConnected}
+          />
         </div>
 
         {/* Context Panel - 30% */}
         <div className="w-[30%]">
-          <ContextPanel />
+          <ContextPanel
+            terminalInfo={terminalInfo}
+            isConnected={isConnected}
+            claudeContext={claudeContext}
+            isClaudeRunning={isClaudeRunning}
+          />
         </div>
       </div>
     </div>
