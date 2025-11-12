@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { ChevronRight, Folder, File, ChevronLeft, Home } from "lucide-react";
+import { ChevronRight, Folder, File, ChevronLeft, Home, FileText, Sparkles } from "lucide-react";
 
 interface FileEntry {
   name: string;
@@ -23,6 +23,8 @@ export function FileBrowser() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [breadcrumbs, setBreadcrumbs] = useState<string[]>([]);
+  const [generating, setGenerating] = useState(false);
+  const [generationResults, setGenerationResults] = useState<any>(null);
 
   // Fetch directory contents
   useEffect(() => {
@@ -97,13 +99,49 @@ export function FileBrowser() {
     });
   };
 
+  const handleGenerateDocs = async () => {
+    setGenerating(true);
+    setGenerationResults(null);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/generate-docs", {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to generate documentation");
+      }
+
+      const results = await response.json();
+      setGenerationResults(results);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error generating documentation");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-6">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">File Browser</h1>
-          <p className="text-slate-400">Browse and organize files in AI_root</p>
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-bold text-white mb-2">File Browser</h1>
+            <p className="text-slate-400">Browse and organize files in AI_root</p>
+          </div>
+          {breadcrumbs.length === 0 && (
+            <button
+              onClick={handleGenerateDocs}
+              disabled={generating}
+              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:from-slate-600 disabled:to-slate-700 text-white rounded-lg transition font-medium shadow-lg"
+            >
+              <Sparkles size={20} />
+              {generating ? "Generating..." : "Generate Documentation"}
+            </button>
+          )}
         </div>
 
         {/* Navigation */}
@@ -135,6 +173,66 @@ export function FileBrowser() {
             </>
           )}
         </div>
+
+        {/* Generation Progress/Results */}
+        {generating && (
+          <div className="mb-6 bg-blue-950/30 border border-blue-900/50 rounded-lg p-6">
+            <div className="flex items-center gap-3">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-400"></div>
+              <div>
+                <p className="text-blue-200 font-medium">Generating documentation...</p>
+                <p className="text-blue-300/70 text-sm mt-1">Analyzing projects and creating Obsidian notes</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {generationResults && (
+          <div className="mb-6 bg-green-950/30 border border-green-900/50 rounded-lg p-6">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h3 className="text-green-200 font-semibold text-lg">Documentation Generated!</h3>
+                <p className="text-green-300/70 text-sm mt-1">
+                  Successfully created {generationResults.successCount} of {generationResults.total} project notes
+                </p>
+              </div>
+              <button
+                onClick={() => setGenerationResults(null)}
+                className="text-green-400 hover:text-green-200 text-sm"
+              >
+                Dismiss
+              </button>
+            </div>
+
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {generationResults.results.map((result: any, index: number) => (
+                <div
+                  key={index}
+                  className={`p-3 rounded-lg ${
+                    result.success
+                      ? "bg-green-900/20 border border-green-800/30"
+                      : "bg-red-900/20 border border-red-800/30"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <FileText size={16} className={result.success ? "text-green-400" : "text-red-400"} />
+                    <span className={result.success ? "text-green-200" : "text-red-200"}>
+                      {result.projectName}
+                    </span>
+                  </div>
+                  {result.error && (
+                    <p className="text-red-300/70 text-xs mt-1 ml-6">{result.error}</p>
+                  )}
+                  {result.mdFiles && (
+                    <p className="text-green-300/60 text-xs mt-1 ml-6">
+                      Analyzed {result.mdFiles.length} markdown files
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Content */}
         <div className="bg-slate-800/30 backdrop-blur-sm rounded-lg border border-slate-700/50 overflow-hidden">
