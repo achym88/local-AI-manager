@@ -166,18 +166,30 @@ export async function POST(request: NextRequest) {
   try {
     console.log("Starting documentation generation...");
 
-    // Get all top-level folders in AI_root
-    const entries = await fs.readdir(AI_ROOT, { withFileTypes: true });
-    const projectFolders = entries
-      .filter(
-        (entry) =>
-          entry.isDirectory() &&
-          !entry.name.startsWith(".") &&
-          !IGNORE_FOLDERS.has(entry.name)
-      )
-      .map((entry) => entry.name);
+    // Parse request body to check for specific project
+    const body = await request.json().catch(() => ({}));
+    const specificProject = body.projectName;
 
-    console.log(`Found ${projectFolders.length} project folders:`, projectFolders);
+    let projectFolders: string[];
+
+    if (specificProject) {
+      // Generate docs for specific project only
+      console.log(`Generating documentation for specific project: ${specificProject}`);
+      projectFolders = [specificProject];
+    } else {
+      // Get all top-level folders in AI_root
+      const entries = await fs.readdir(AI_ROOT, { withFileTypes: true });
+      projectFolders = entries
+        .filter(
+          (entry) =>
+            entry.isDirectory() &&
+            !entry.name.startsWith(".") &&
+            !IGNORE_FOLDERS.has(entry.name)
+        )
+        .map((entry) => entry.name);
+
+      console.log(`Found ${projectFolders.length} project folders:`, projectFolders);
+    }
 
     const results: ProjectAnalysis[] = [];
 

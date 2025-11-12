@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { ChevronRight, Folder, File, ChevronLeft, Home, FileText, Sparkles } from "lucide-react";
+import { ChevronRight, Folder, File, ChevronLeft, Home, FileText, Sparkles, RefreshCw } from "lucide-react";
 
 interface FileEntry {
   name: string;
@@ -25,6 +25,7 @@ export function FileBrowser() {
   const [breadcrumbs, setBreadcrumbs] = useState<string[]>([]);
   const [generating, setGenerating] = useState(false);
   const [generationResults, setGenerationResults] = useState<any>(null);
+  const [generatingProject, setGeneratingProject] = useState<string | null>(null);
 
   // Fetch directory contents
   useEffect(() => {
@@ -120,6 +121,34 @@ export function FileBrowser() {
       setError(err instanceof Error ? err.message : "Error generating documentation");
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const handleGenerateProjectDocs = async (projectName: string) => {
+    setGeneratingProject(projectName);
+    setGenerationResults(null);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/generate-docs", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ projectName }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to generate documentation");
+      }
+
+      const results = await response.json();
+      setGenerationResults(results);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error generating documentation");
+    } finally {
+      setGeneratingProject(null);
     }
   };
 
@@ -269,20 +298,27 @@ export function FileBrowser() {
                     <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
                       Modified
                     </th>
+                    {breadcrumbs.length === 0 && (
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
+                        Actions
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
                   {files.map((file, index) => (
                     <tr
                       key={index}
-                      className="border-b border-slate-700/30 hover:bg-slate-700/20 transition cursor-pointer"
-                      onClick={
-                        file.type === "folder"
-                          ? () => handleFolderClick(file.path)
-                          : undefined
-                      }
+                      className="border-b border-slate-700/30 hover:bg-slate-700/20 transition"
                     >
-                      <td className="px-6 py-4 flex items-center gap-3">
+                      <td
+                        className="px-6 py-4 flex items-center gap-3 cursor-pointer"
+                        onClick={
+                          file.type === "folder"
+                            ? () => handleFolderClick(file.path)
+                            : undefined
+                        }
+                      >
                         {file.type === "folder" ? (
                           <Folder size={18} className="text-blue-400 flex-shrink-0" />
                         ) : (
@@ -290,15 +326,56 @@ export function FileBrowser() {
                         )}
                         <span className="text-white font-medium">{file.name}</span>
                       </td>
-                      <td className="px-6 py-4 text-slate-400 text-sm capitalize">
+                      <td
+                        className="px-6 py-4 text-slate-400 text-sm capitalize cursor-pointer"
+                        onClick={
+                          file.type === "folder"
+                            ? () => handleFolderClick(file.path)
+                            : undefined
+                        }
+                      >
                         {file.type}
                       </td>
-                      <td className="px-6 py-4 text-slate-400 text-sm">
+                      <td
+                        className="px-6 py-4 text-slate-400 text-sm cursor-pointer"
+                        onClick={
+                          file.type === "folder"
+                            ? () => handleFolderClick(file.path)
+                            : undefined
+                        }
+                      >
                         {file.type === "file" ? formatFileSize(file.size) : "-"}
                       </td>
-                      <td className="px-6 py-4 text-slate-400 text-sm">
+                      <td
+                        className="px-6 py-4 text-slate-400 text-sm cursor-pointer"
+                        onClick={
+                          file.type === "folder"
+                            ? () => handleFolderClick(file.path)
+                            : undefined
+                        }
+                      >
                         {formatDate(file.modified)}
                       </td>
+                      {breadcrumbs.length === 0 && (
+                        <td className="px-6 py-4">
+                          {file.type === "folder" && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleGenerateProjectDocs(file.name);
+                              }}
+                              disabled={generatingProject === file.name}
+                              className="p-2 hover:bg-slate-600/50 rounded-lg transition text-slate-400 hover:text-blue-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                              title={`Generate documentation for ${file.name}`}
+                            >
+                              <RefreshCw
+                                size={16}
+                                className={generatingProject === file.name ? "animate-spin" : ""}
+                              />
+                            </button>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
