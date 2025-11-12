@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Kanban Board - Project Management",
-  description: "A beautiful Kanban board for managing your projects and tasks",
+  title: "AI Root Browser",
+  description: "Browse and organize files in your AI_root directory",
 };
 
 export default function RootLayout({
